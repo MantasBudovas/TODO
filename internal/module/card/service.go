@@ -3,7 +3,6 @@ package card
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"time"
 
 	"app/internal/entity"
@@ -11,6 +10,8 @@ import (
 
 	"github.com/redis/go-redis/v9"
 )
+
+const cacheKey = "all_cards"
 
 type Service struct {
 	repo  *Repository
@@ -27,7 +28,7 @@ func (s *Service) CreateCard(card *entity.Card) error {
 	}
 
 	if card.Priority != low && card.Priority != medium && card.Priority != high {
-		return errors.New("invalid priority: must be Low, Medium, or High")
+		return ErrInvalidPriority
 	}
 
 	if err := s.repo.Save(card); err != nil {
@@ -42,11 +43,10 @@ func (s *Service) CreateCard(card *entity.Card) error {
 
 func (s *Service) GetCards() ([]entity.Card, error) {
 	ctx := context.Background()
-	cacheKey := "all_cards"
 
 	val, err := s.redis.Get(ctx, cacheKey).Result()
 	if err == nil {
-		logger.Info("Cache Hit! Returning data from Redis.")
+		logger.Info("Returning data from Redis.")
 		var cards []entity.Card
 		json.Unmarshal([]byte(val), &cards)
 		return cards, nil
@@ -67,30 +67,31 @@ func (s *Service) GetCards() ([]entity.Card, error) {
 func (s *Service) ModifyCard(id int, input *entity.Card) (*entity.Card, error) {
 	existing, err := s.repo.GetByID(id)
 	if err != nil {
-		return nil, err // Likely record not found
+		return nil, err
 	}
-
-	existing.Completed = input.Completed
 
 	if input.Name != "" {
 		existing.Name = input.Name
 	}
-	if input.Priority != "" {
-		existing.Priority = input.Priority
+	if input.Completed != nil {
+		existing.Completed = input.Completed
 	}
 	if input.DueDate != nil {
 		existing.DueDate = input.DueDate
 	}
+	if input.Priority != "" {
+		existing.Priority = input.Priority
+	}
 
 	if existing.Priority != low && existing.Priority != medium && existing.Priority != high {
-		return nil, errors.New("invalid priority")
+		return nil, ErrInvalidPriority
 	}
 
 	if err := s.repo.Update(existing); err != nil {
 		return nil, err
 	}
 
-	s.redis.Del(context.Background(), "all_cards")
+	s.redis.Del(context.Background(), cacheKey)
 
 	return existing, nil
 }
