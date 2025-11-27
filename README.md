@@ -9,7 +9,6 @@ A robust RESTful backend service built with Go, featuring MySQL persistence and 
 *   **Infrastructure:** Docker & Docker Compose
 
 ## How to Start
-Run the entire stack (App + DB + Redis) with one command:
 
 ```bash
 make build
